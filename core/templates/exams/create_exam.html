@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Create Exam - Admin</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        body {
+            background: #f4f6f9;
+        }
+        .form-card {
+            border-radius: 12px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark px-4">
+    <a class="navbar-brand fw-bold" href="/admin_dashboard/">Admin Panel</a>
+    <div class="ms-auto">
+        <a href="/admin_dashboard/" class="btn btn-outline-light btn-sm me-2">Dashboard</a>
+        <a href="/admin_reports/" class="btn btn-warning btn-sm me-2">Reports</a>
+        <a href="/admin_logout/" class="btn btn-danger btn-sm">Logout</a>
+    </div>
+</nav>
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-7">
+
+            <div class="card form-card p-4">
+                <h4 class="text-center mb-4">Create New Exam</h4>
+
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label class="form-label">Exam Title</label>
+                        <input type="text" name="title" class="form-control"
+                               placeholder="e.g. Data Structures Final Test" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea name="description" class="form-control"
+                                  rows="3" placeholder="Short description of the exam" required></textarea>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Duration (minutes)</label>
+                            <input type="number" name="duration" class="form-control"
+                                   placeholder="e.g. 60" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Start Time</label>
+                        <input type="datetime-local" name="start_time"
+                               class="form-control" required>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label">End Time</label>
+                        <input type="datetime-local" name="end_time"
+                               class="form-control" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        Create Exam & Add Questions
+                    </button>
+                </form>
+
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<footer class="text-center mt-4 mb-3 text-muted">
+    <small>Define exam schedule and duration before adding questions</small>
+</footer>
+
+</body>
+</html>

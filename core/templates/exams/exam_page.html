@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Online Exam</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <meta name="csrf-token" content="{{ csrf_token }}">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        body { background:#f4f6f9; }
+        .card-box {
+            border-radius:12px;
+            box-shadow:0 6px 15px rgba(0,0,0,0.08);
+        }
+        video {
+            width:100%;
+            border-radius:10px;
+        }
+    </style>
+
+<script>
+let timeLeft = {{ duration }};
+let timerInterval;
+let mediaStream = null;
+let videoRecorder = null;
+let audioRecorder = null;
+let videoChunks = [];
+let audioChunks = [];
+let examSubmitted = false;
+
+/* ================= TIMER ================= */
+function startTimer(){
+    updateTimer();
+    timerInterval = setInterval(()=>{
+        timeLeft--;
+        updateTimer();
+        if(timeLeft <= 0){
+            clearInterval(timerInterval);
+            alert("⏰ Time up! Exam auto submitted.");
+            submitExam();
+        }
+    },1000);
+}
+
+function updateTimer(){
+    let m = Math.floor(timeLeft/60);
+    let s = timeLeft % 60;
+    document.getElementById("timer").innerText =
+        m + ":" + (s < 10 ? "0" : "") + s;
+}
+
+/* ================= CAMERA + AUDIO ================= */
+function enableCam(){
+    navigator.mediaDevices.getUserMedia({ video:true, audio:true })
+    .then(stream=>{
+        mediaStream = stream;
+        document.getElementById("video").srcObject = stream;
+
+        /* 🎥 VIDEO RECORD */
+        const videoMime = MediaRecorder.isTypeSupported("video/webm")
+            ? "video/webm" : "";
+        videoRecorder = new MediaRecorder(stream, { mimeType: videoMime });
+        videoRecorder.start();
+
+        videoRecorder.ondataavailable = e => {
+            if(e.data.size > 0) videoChunks.push(e.data);
+        };
+
+        /* 🎤 AUDIO RECORD (SEPARATE STREAM – CRITICAL) */
+        const audioStream = new MediaStream(stream.getAudioTracks());
+        const audioMime = MediaRecorder.isTypeSupported("audio/webm")
+            ? "audio/webm" : "";
+
+        audioRecorder = new MediaRecorder(audioStream, { mimeType: audioMime });
+        audioRecorder.start();
+
+        audioRecorder.ondataavailable = e => {
+            if(e.data.size > 0) audioChunks.push(e.data);
+        };
+    })
+    .catch(()=>{
+        alert("❌ Camera & microphone access is mandatory!");
+    });
+}
+
+/* ================= PROCTORING FRAME ================= */
+function sendFrame(){
+    if(!mediaStream || examSubmitted) return;
+
+    const video = document.getElementById("video");
+    if(video.videoWidth === 0) return;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video,0,0);
+
+    fetch("{% url 'proctoring_feed' attempt.id %}",{
+        method:"POST",
+        headers:{
+            "X-CSRFToken":document.querySelector('meta[name="csrf-token"]').content
+        },
+        body:new URLSearchParams({
+            image: canvas.toDataURL("image/jpeg")
+        })
+    });
+}
+
+/* ================= TAB SWITCH ================= */
+document.addEventListener("visibilitychange",function(){
+    if(document.hidden && !examSubmitted){
+        fetch("{% url 'proctoring_feed' attempt.id %}",{
+            method:"POST",
+            headers:{
+                "X-CSRFToken":document.querySelector('meta[name="csrf-token"]').content
+            },
+            body:new URLSearchParams({ event_type:"TAB_SWITCH" })
+        });
+        alert("⚠️ Tab switch detected!");
+    }
+});
+
+/* ================= UPLOAD VIDEO + AUDIO ================= */
+function stopAndUpload(callback){
+    let pending = 0;
+
+    function done(){
+        pending--;
+        if(pending <= 0) callback();
+    }
+
+    /* VIDEO */
+    if(videoRecorder){
+        pending++;
+        videoRecorder.stop();
+        videoRecorder.onstop = ()=>{
+            const blob = new Blob(videoChunks, { type:"video/webm" });
+            const fd = new FormData();
+            fd.append("video", blob, "exam_video.webm");
+
+            fetch("{% url 'upload_exam_video' attempt.id %}",{
+                method:"POST",
+                headers:{ "X-CSRFToken":document.querySelector('meta[name="csrf-token"]').content },
+                body:fd
+            }).finally(done);
+        };
+    }
+
+    /* AUDIO */
+    if(audioRecorder){
+        pending++;
+        audioRecorder.stop();
+        audioRecorder.onstop = ()=>{
+            const blob = new Blob(audioChunks, { type:"audio/webm" });
+            const fd = new FormData();
+            fd.append("audio", blob, "exam_audio.webm");
+
+            fetch("{% url 'upload_exam_audio' attempt.id %}",{
+                method:"POST",
+                headers:{ "X-CSRFToken":document.querySelector('meta[name="csrf-token"]').content },
+                body:fd
+            }).finally(done);
+        };
+    }
+
+    if(pending === 0) callback();
+}
+
+/* ================= SUBMIT ================= */
+function submitExam(){
+    if(examSubmitted) return;
+    examSubmitted = true;
+
+    clearInterval(timerInterval);
+
+    stopAndUpload(()=>{
+        if(mediaStream){
+            mediaStream.getTracks().forEach(t=>t.stop());
+        }
+        document.getElementById("examForm").submit();
+    });
+
+    /* SAFETY FALLBACK */
+    setTimeout(()=>{
+        if(!examSubmitted) return;
+        document.getElementById("examForm").submit();
+    },8000);
+}
+
+/* INIT */
+window.onload = function(){
+    startTimer();
+    enableCam();
+    setInterval(sendFrame, 5000);
+};
+</script>
+</head>
+
+<body>
+
+<nav class="navbar navbar-dark bg-dark px-4">
+    <span class="navbar-brand">Online Exam</span>
+    <span class="text-white">⏱ Time Left: <b id="timer"></b></span>
+</nav>
+
+<div class="container mt-4">
+<div class="row">
+
+<!-- QUESTIONS -->
+<div class="col-md-8">
+<div class="card p-4 card-box">
+<form id="examForm" method="post" action="{% url 'submit_exam' attempt.id %}">
+{% csrf_token %}
+
+{% for q in questions %}
+<p><b>Q{{ forloop.counter }}.</b> {{ q.text }}</p>
+<textarea name="answer_{{ q.id }}" class="form-control mb-3" rows="3" required></textarea>
+{% endfor %}
+
+<button type="button" onclick="submitExam()" class="btn btn-danger w-100">
+    Submit Exam
+</button>
+</form>
+</div>
+</div>
+
+<!-- PROCTORING -->
+<div class="col-md-4">
+<div class="card p-3 text-center card-box">
+<h6>Live Proctoring</h6>
+<video id="video" autoplay muted></video>
+<small class="text-muted mt-2">Camera & microphone are monitored</small>
+</div>
+</div>
+
+</div>
+</div>
+
+</body>
+</html>

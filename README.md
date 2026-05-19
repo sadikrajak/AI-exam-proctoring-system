@@ -36,4 +36,4 @@ using real-time webcam and audio analysis.
 6. Start server using `python manage.py runserver`
 
 ## 📧 Contact
-- GitHub: https://github.com/yourusername
+- GitHub: https://github.com/sadikrajak
